@@ -1,0 +1,45 @@
+import com.mongodb.spark.MongoSpark
+import org.apache.spark.sql.SparkSession
+
+object ReadMongo {
+
+  def main(args: Array[String]): Unit = {
+    val spark = SparkSession.builder()
+      .master("local")
+      .appName("MyApp")
+      .config("spark.mongodb.input.uri", "mongodb://127.0.0.1/BigData.douban250")
+      .config("spark.mongodb.output.uri", "mongodb://127.0.0.1/BigData.doubanResult")
+      .getOrCreate()
+    // 设置log级别
+
+    spark.sparkContext.setLogLevel("WARN")
+    val df = MongoSpark.load(spark)
+    df.show()
+    df.createOrReplaceTempView("douban")
+    val resRdd1 = spark.sql("select information from douban").rdd
+    resRdd1.foreach(println)
+    val resRdd2=resRdd1.map(row=>row.mkString).map(
+      x=>{
+        val line=x.substring(x.length-2,x.length)
+        (line,1)
+      }
+    )
+    resRdd2.foreach(println)
+
+    val finalResult=resRdd2.reduceByKey(_+_)
+    finalResult.foreach(println)
+    //MongoDB数据库存储
+    import spark.implicits._
+    val resultDf=finalResult.toDF("content","num")
+    MongoSpark.save(resultDf)
+    //文件读写
+    //val filename = "data\\BeijingHouse.csv"
+    //val writer = new PrintWriter(new File(filename))
+
+    //finalResult.repartition(1).saveAsTextFile(filename)
+
+
+    spark.stop()
+  }
+
+}
